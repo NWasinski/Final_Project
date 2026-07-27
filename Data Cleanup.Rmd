@@ -1,0 +1,158 @@
+---
+title: "Data_Cleanup"
+author: "Natalie Wasinski"
+date: "2026-07-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# Whale Shark Aggregation
+## Importing The Data
+```{r Importing the Data}
+#install.packages("robis") # one-time
+#install.packages("leaflet.extras")
+```
+
+## Pulling packages
+```{r libraries}
+library(robis)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(leaflet)
+library(leaflet.extras)
+library(mapedit)
+```
+
+## Pull the raw data
+```{r pulling raw data through map}
+# set boundaries on reefs to get coordinates to use to search through the data for whale sharks (Rhincodon typus)
+ningaloo_wkt <- get_geometry()
+gbr_wkt <- get_geometry()
+# run this chunk in the console or it is run non-interactively and does not produce proper coordinates
+```
+
+## Pull the raw data
+```{r manual coordinates}
+# Get reef coordinates from online (marineregions.org) and use them to set boundaries to pull whale shark data from OBIS. Have to repeat the first pair of coordinates at the end so the polygon is closed.
+ningaloo_wkt <- "POLYGON((113.37 -24.03, 114.47 -24.03, 114.47 -21.57, 113.37 -21.57, 113.37 -24.03))"
+gbr_wkt <- "POLYGON((142.46 -24.5, 154 -24.5, 154 -10.47, 142.46 -10.47, 142.46 -24.5))"
+
+# Check outline
+ningaloo_wkt
+
+# Pull whale shark recordings for each site
+ningaloo_raw <- occurrence(scientificname = "Rhincodon typus", geometry = ningaloo_wkt)
+gbr_raw <- occurrence(scientificname = "Rhincodon typus", geometry = gbr_wkt)
+
+# Check that boundaries have been set and that you can pull data from that section. Get range of coordinates that have been outlined in above sections
+test <- occurrence(scientificname = "Rhincodon typus", geometry = ningaloo_wkt)
+nrow(test)
+range(test$decimalLatitude, na.rm = TRUE)
+range(test$decimalLongitude, na.rm = TRUE)
+
+# Visual confirmation that there are points in the section of the map that you want
+map_leaflet(test)
+
+# Tag each with a region label BEFORE combining — this is your key grouping variable
+ningaloo_raw <- ningaloo_raw %>% mutate(region = "Ningaloo Reef")
+gbr_raw <- gbr_raw %>% mutate(region = "Great Barrier Reef")
+
+# Combine into one raw dataset
+raw_data <- bind_rows(ningaloo_raw, gbr_raw)
+
+library(here)
+# Create a data directory to save files in
+dir.create(here("data"))
+# Save raw pull so you're not re-hitting the API every time
+saveRDS(raw_data, here("data", "whale_shark_raw.rds"))
+```
+
+## Inspecting the data
+```{r Inspect}
+# Look at the raw data to see what has been pulled from OBIS. This will help determine what needs to be cleaned up and how to clean it up.
+glimpse(raw_data)
+colnames(raw_data)
+nrow(raw_data)
+```
+
+## Filter unusable records
+```{r Filter}
+# Leaving in missing or 0,0 coordinates will cause problems with mapping and analysis, biasing any spatial or temporal analysis.
+clean_data <- raw_data %>%
+  filter(
+    !is.na(decimalLatitude),
+    !is.na(decimalLongitude),
+    !is.na(eventDate),
+    decimalLatitude != 0,          
+    # removes null-island / bad-coordinate artefacts
+    decimalLongitude != 0
+  )
+
+# Removing duplicate records prevents inflated counts, as OBIS aggregates from multiple contributing datasets. This causes the same sighting to appear more than once.
+clean_data <- clean_data %>%
+  distinct(scientificName, decimalLatitude, decimalLongitude, eventDate, .keep_all = TRUE)
+
+# Dates are in inconsistent character strings, so making them consistent makes them usable for time-based comparison.
+clean_data <- clean_data %>%
+  mutate(
+    eventDate = ymd_hms(eventDate, quiet = TRUE) %>% as.Date(),
+    year  = year(eventDate),
+    month = month(eventDate, label = TRUE)
+  ) %>%
+  filter(!is.na(year))   
+# drop rows where date parsing failed
+
+# To strenghten comparison, we can restrict to a time window that makes sense for relavent records.
+clean_data <- clean_data %>%
+  filter(year >= 2000)   
+# adjust based on data density
+```
+
+## Descriptive Summary of Clean Data
+```{r Summary}
+# Understanding the shape of clean data before plotting
+summary_table <- clean_data %>%
+  group_by(region) %>%
+  summarise(
+    n_records = n(),
+    n_years = n_distinct(year),
+    first_year = min(year),
+    last_year = max(year),
+    .groups = "drop"
+  )
+
+summary_table
+
+# Compute seasonal pattern by region
+monthly_summary <- clean_data %>%
+  group_by(region, month) %>%
+  summarise(n = n(), .groups = "drop")
+
+monthly_summary
+```
+
+
