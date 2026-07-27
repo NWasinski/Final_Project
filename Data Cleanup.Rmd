@@ -77,6 +77,14 @@ range(test$decimalLongitude, na.rm = TRUE)
 # Visual confirmation that there are points in the section of the map that you want
 map_leaflet(test)
 
+test2 <- occurrence(scientificname = "Rhincodon typus", geometry = gbr_wkt)
+nrow(test)
+range(test$decimalLatitude, na.rm = TRUE)
+range(test$decimalLongitude, na.rm = TRUE)
+
+map_leaflet(test2)
+
+
 # Tag each with a region label BEFORE combining — this is your key grouping variable
 ningaloo_raw <- ningaloo_raw %>% mutate(region = "Ningaloo Reef")
 gbr_raw <- gbr_raw %>% mutate(region = "Great Barrier Reef")
@@ -97,6 +105,10 @@ saveRDS(raw_data, here("data", "whale_shark_raw.rds"))
 glimpse(raw_data)
 colnames(raw_data)
 nrow(raw_data)
+
+summary(raw_data)
+str(raw_data)
+
 ```
 
 ## Filter unusable records
@@ -153,6 +165,11 @@ monthly_summary <- clean_data %>%
   summarise(n = n(), .groups = "drop")
 
 monthly_summary
+
+# Cleaner monthy summary
+library(tidyr)
+monthly_summary %>%
+  pivot_wider(names_from = region, values_from = n)
 ```
 
 
