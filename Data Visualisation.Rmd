@@ -29,9 +29,19 @@ plot(pressure)
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
+## Importing saved summary files
+```{r}
+library(here)
+library(tidyverse)
+
+clean_data <- readRDS(here("data", "clean_data.rds"))
+summary_table <- readRDS(here("data", "summary_table.rds"))
+monthly_summary <- readRDS(here("data", "monthly_summary.rds"))
+```
 
 ## Occurrence records by region
 ```{r occurrence}
+library(ggplot2)
 ggplot(summary_table, aes(x = region, y = n_records, fill = region)) +
   geom_col() +
   labs(
