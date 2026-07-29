@@ -2,7 +2,9 @@
 title: "Data_Cleanup"
 author: "Natalie Wasinski"
 date: "2026-07-26"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -45,14 +47,17 @@ library(lubridate)
 library(leaflet)
 library(leaflet.extras)
 library(mapedit)
+library(tidyverse)
 ```
 
 ## Pull the raw data
 ```{r pulling raw data through map}
-# set boundaries on reefs to get coordinates to use to search through the data for whale sharks (Rhincodon typus)
-ningaloo_wkt <- get_geometry()
-gbr_wkt <- get_geometry()
-# run this chunk in the console or it is run non-interactively and does not produce proper coordinates
+# for a more refined approach, you can use the map to draw polygons around the areas of interest and then use those polygons to filter the data pulled from OBIS. This allows for a more targeted data collection process, ensuring that only relevant records are included in the analysis.
+
+#ningaloo_wkt <- get_geometry()
+#gbr_wkt <- get_geometry()
+
+# coordinates for this reef system were already known and used in raw data pulling below
 ```
 
 ## Pull the raw data
@@ -155,9 +160,35 @@ summary_table <- clean_data %>%
     first_year = min(year),
     last_year = max(year),
     .groups = "drop"
-  )
+  )%>%
+  mutate(Records_Per_Year = round(n_records / n_years, 1))
 
 summary_table
+
+
+# Turn into presentation table
+library(gt)
+
+summary_table %>%
+  gt() %>%
+  tab_header(
+    title = "Whale Shark Occurrence Summary by Region"
+  ) %>%
+  cols_label(
+    region = "Region",
+    n_records = "Total Records",
+    n_years = "Years with Data",
+    first_year = "First Record",
+    last_year = "Most Recent Record",
+    Records_Per_Year = "Average Records per Year"
+  ) %>%
+  tab_source_note(source_note = "Source: OBIS (obis.org), accessed via robis") %>%
+  tab_options(
+    table.font.size = 14,
+    heading.title.font.size = 18,
+    heading.subtitle.font.size = 13,
+    column_labels.font.weight = "bold"
+  )
 
 # Compute seasonal pattern by region
 monthly_summary <- clean_data %>%
@@ -167,9 +198,31 @@ monthly_summary <- clean_data %>%
 monthly_summary
 
 # Cleaner monthy summary
-library(tidyr)
-monthly_summary %>%
+monthly_summary_wide <- monthly_summary %>%
   pivot_wider(names_from = region, values_from = n)
+saveRDS(monthly_summary_wide, here("data", "monthly_summary_wide.rds"))
+# Turn into presentation table
+#install.packages("gt")
+library(gt)
+
+monthly_summary_wide %>%
+  gt() %>%
+  tab_header(title = "Whale Shark Occurrence Records by Month and Region") %>%
+  cols_label(month = "Month") %>%
+  fmt_missing(columns = everything(), missing_text = "0") %>%
+  tab_source_note(source_note = "Source: OBIS (obis.org), accessed via robis") %>%
+  data_color(
+    columns = c(`Ningaloo Reef`, `Great Barrier Reef`),
+    colors = scales::col_numeric(palette = c("white", "#0072B2"), domain = NULL)
+  ) %>%
+  tab_options(table.font.size = 14, heading.title.font.size = 18)
+```
+
+# Saving summary table files
+```{r}
+saveRDS(clean_data, here("data", "clean_data.rds"))
+saveRDS(summary_table, here("data", "summary_table.rds"))
+saveRDS(monthly_summary, here("data", "monthly_summary.rds"))
 ```
 
 
